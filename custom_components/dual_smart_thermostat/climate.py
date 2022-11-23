@@ -3,7 +3,6 @@
 import asyncio
 from datetime import timedelta
 import logging
-from typing import List
 
 import voluptuous as vol
 
@@ -277,7 +276,7 @@ class DualSmartThermostat(ClimateEntity, RestoreEntity):
         self.cooler_entity_id = cooler_entity_id
         self.sensor_entity_id = sensor_entity_id
         self.sensor_floor_entity_id = sensor_floor_entity_id
-        self.opening_entities: List = opening_entities
+        self.opening_entities: list = opening_entities
         self.ac_mode = ac_mode
         self._heat_cool_mode = heat_cool_mode
         self.min_cycle_duration: timedelta = min_cycle_duration
@@ -863,39 +862,40 @@ class DualSmartThermostat(ClimateEntity, RestoreEntity):
             if not self._needs_control(time, force, True):
                 return
 
-            too_cold = self._is_too_cold("_target_temp_low")
-            too_hot = self._is_too_hot("_target_temp_high")
+            heating_too_cold = self._is_too_cold("_target_temp_low")
+            heating_too_hot = self._is_too_hot("_target_temp_low")
+            cooling_too_cold = self._is_too_cold("_target_temp_high")
+            cooling_too_hot = self._is_too_hot("_target_temp_high")
 
-            if self._is_opening_open:
+            if heating_too_cold and not self._is_floor_hot:
+                await self._async_heater_turn_on()
+            elif heating_too_hot or self._is_floor_hot or self._is_opening_open:
                 await self._async_heater_turn_off()
-                await self._async_cooler_turn_off()
-            elif self._is_floor_hot:
-                await self._async_heater_turn_off()
-            else:
-                await self.async_heater_cooler_toggle(too_cold, too_hot)
-
-            if time is not None:
+            elif time is not None:
                 # The time argument is passed only in keep-alive case
                 _LOGGER.info(
-                    "Keep-alive - Toggling on heater cooler %s, %s",
+                    "Keep-alive - Toggling on heater %s",
                     self.heater_entity_id,
+                )
+                if self._is_heater_active:
+                    await self._async_heater_turn_on()
+                else:
+                    await self._async_heater_turn_off()
+
+            if cooling_too_cold or self._is_opening_open:
+                await self._async_cooler_turn_off()
+            elif cooling_too_hot:
+                await self._async_cooler_turn_on()
+            elif time is not None:
+                # The time argument is passed only in keep-alive case
+                _LOGGER.info(
+                    "Keep-alive - Toggling on cooler %s",
                     self.cooler_entity_id,
                 )
-                await self.async_heater_cooler_toggle(too_cold, too_hot)
-
-    async def async_heater_cooler_toggle(self, too_cold, too_hot):
-        """Toggle heater cooler based on device state"""
-        if too_cold:
-            if not self._is_opening_open:
-                await self._async_heater_turn_on()
-            await self._async_cooler_turn_off()
-        elif too_hot:
-            if not self._is_opening_open:
-                await self._async_cooler_turn_on()
-            await self._async_heater_turn_off()
-        else:
-            await self._async_heater_turn_off()
-            await self._async_cooler_turn_off()
+                if self._is_cooler_active:
+                    await self._async_cooler_turn_on()
+                else:
+                    await self._async_cooler_turn_off()
 
     @property
     def _is_opening_open(self):
