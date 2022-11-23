@@ -882,7 +882,7 @@ class DualSmartThermostat(ClimateEntity, RestoreEntity):
                 else:
                     await self._async_heater_turn_off()
 
-            if cooling_too_cold or self._is_opening_open:
+            if cooling_too_cold or self._is_opening_open or self._is_heater_active:
                 await self._async_cooler_turn_off()
             elif cooling_too_hot:
                 await self._async_cooler_turn_on()
